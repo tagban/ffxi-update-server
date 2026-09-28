@@ -181,8 +181,15 @@ LandSandBoat's login server accepts only the xiloader protocol whose major.minor
 
 The auth request (`command` 16) and the login data connection (54230) are the same in both.
 Without `loader_version`, try the newest variant you speak. A server that wants another refuses
-with `{"error_message":"Your xiloader is too old.\nPlease update to version '2.1.x'. …"}`; parse the
-version after `version '` and sign in once more with that variant.
+with an `error_message` naming it as `<major>.<minor>.x`, in either wording:
+
+```
+{"error_message":"Your xiloader is too old.\nPlease update to version '2.1.x'.\nYour client reported '2.2.0'."}
+{"error_message":"Unsupported xiloader version 2.1.2.\nThis server requires version 2.2.x."}
+```
+
+Find the `<digits>.<digits>.x` in it (the client's own version has no `.x`) and sign in once more
+with that variant.
 
 ## 8. Security
 

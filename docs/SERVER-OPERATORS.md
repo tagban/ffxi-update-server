@@ -100,6 +100,13 @@ cannot open that address but outside players can, use the server's local address
 
 ### Starting from a version your players have
 
+**New players.** When the publisher runs on an install PlayOnline updated, it reads `patch.cfg` to
+tell which files are still exactly as Square Enix's installer left them (version `30210706_0`, the
+2021 installer) and hosts everything else, once: about 1.6 GB (400 MB compressed) for 2026-09. So a
+player with nothing but a fresh official install gets the current version from your server alone,
+and a player on a recent version still downloads only what changed. Running it again on a version
+the server already has offers to add this, if an older publisher did not.
+
 A new site is empty. Seed it with the version your game server wants now, as a list of files your
 players already have (no game files, a few MB), and every later update publishes only what it
 changes:

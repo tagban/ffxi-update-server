@@ -53,6 +53,17 @@ pub struct Args {
     pub current: bool,
 }
 
+/// The objects a site hosts: each version's files but those of its base (the players').
+fn hosted_objects(src: &Source, index: &Index) -> Result<BTreeSet<String>> {
+    let mut out = BTreeSet::new();
+    for iv in &index.versions {
+        let m = src.manifest(&iv.version)?;
+        let base: BTreeSet<String> = if iv.base.is_empty() { BTreeSet::new() } else { src.manifest(&iv.base)?.files.into_iter().map(|e| e.sha256).collect() };
+        out.extend(m.files.into_iter().map(|e| e.sha256).filter(|h| !base.contains(h)));
+    }
+    Ok(out)
+}
+
 /// The next free name for a customised version of `retail`: 30260904_1-custom.1, .2, ...
 fn custom_name(index: &Index, retail: &str) -> String {
     let base = retail.split('-').next().unwrap_or(retail);
@@ -267,9 +278,33 @@ pub fn release(a: Args, interactive: bool, p: Progress) -> Result<()> {
     let empty = Manifest { format: FORMAT.into(), version: String::new(), build: String::new(), ffximain_sha256: String::new(), ffxi_sha256: String::new(), created: 0, files: Vec::new() };
     let cm = cm.unwrap_or(empty);
     let files = |m: &Manifest| m.files.iter().map(|e| (e.path.clone(), e.sha256.clone())).collect::<BTreeSet<_>>();
+    // Everything a fresh install from the official installer lacks is hosted too (installer_base),
+    // so a new player gets the whole version from this server; players on a recent version still
+    // download only what changed.
+    let ib = installer_base(&game, &m);
+    let base_of = |v: &str| index.versions.iter().find(|x| x.version == v).map(|x| x.base.clone()).unwrap_or_default();
+    let lacking = |b: &Manifest| {
+        let have: BTreeSet<&str> = b.files.iter().map(|e| e.sha256.as_str()).collect();
+        let l: Vec<&Entry> = m.files.iter().filter(|e| !have.contains(e.sha256.as_str())).collect();
+        (l.len(), l.iter().map(|e| e.size).sum::<u64>())
+    };
+    let mut rebase = false;
     if files(&m) == files(&cm) {
-        println!("The server already hands out exactly this game. Nothing to do.");
-        return Ok(());
+        match &ib {
+            Some(b) if base_of(&current) != b.version => {
+                let (n, bytes) = lacking(b);
+                println!("The server hands out exactly this game, but a player needs {} first to get it", base_of(&current));
+                println!("from you. A fresh install from the official installer ({}) lacks {n} files, {}.", b.version.trim_start_matches("installer-"), human(bytes));
+                if interactive && !yes_no("Host them too, so a fresh install updates from your server alone?", true) {
+                    return Ok(());
+                }
+                rebase = true;
+            }
+            _ => {
+                println!("The server already hands out exactly this game. Nothing to do.");
+                return Ok(());
+            }
+        }
     }
     // a name given: a customised version (the server's own DATs over a retail version)
     if let Some(n) = &a.name {
@@ -303,7 +338,7 @@ pub fn release(a: Args, interactive: bool, p: Progress) -> Result<()> {
         return Err(format!("the server has a version named {} already; pick another name", m.version));
     }
     let d = diff(&cm, &m);
-    if index.versions.iter().any(|v| v.version == m.version) {
+    if !rebase && index.versions.iter().any(|v| v.version == m.version) {
         println!("The server has {} already, but hands out {current}.", m.version);
         match &site {
             Some(d) if interactive && yes_no(&format!("Hand out {} now?", m.version), false) => {
@@ -347,10 +382,24 @@ pub fn release(a: Args, interactive: bool, p: Progress) -> Result<()> {
     }
     rule();
 
-    let mut hosted: BTreeSet<String> = cm.files.iter().map(|e| e.sha256.clone()).collect();
-    if let Some(b) = &bm {
-        hosted.extend(b.files.iter().map(|e| e.sha256.clone()));
-    }
+    // what the site hosts already, and what players bring (the installer's files, else the base
+    // the site's version has): the rest goes up
+    let _ = &bm;
+    let mut hosted = hosted_objects(&src, &index)?;
+    let base = match &ib {
+        Some(b) => {
+            let (n, bytes) = lacking(b);
+            println!("A fresh install ({}) needs {n} files, {}, from your server; those it hosts already are not sent again.", b.version.trim_start_matches("installer-"), human(bytes));
+            hosted.extend(b.files.iter().map(|e| e.sha256.clone()));
+            b.version.clone()
+        }
+        None => {
+            if let Some(b) = &bm {
+                hosted.extend(b.files.iter().map(|e| e.sha256.clone()));
+            }
+            base
+        }
+    };
     let ask_hand_out = |unknown: bool| {
         if interactive {
             println!("\nHanding it out means players' launchers download it on their next Play.");
@@ -366,8 +415,8 @@ pub fn release(a: Args, interactive: bool, p: Progress) -> Result<()> {
 
     // straight into the site folder
     if let Some(d) = &site {
-        let hand_out = current.is_empty() || ask_hand_out(unknown);
-        let (h, index) = publish_install(d, &game, &m, &hosted, &base, &current, hand_out, p)?;
+        let hand_out = current.is_empty() || (rebase && current == m.version) || ask_hand_out(unknown);
+        let (h, index) = publish_install(d, &game, &m, &hosted, &base, ib.as_ref(), &current, hand_out, p)?;
         rule();
         println!("Published {} into {}: {} files, {}.", m.version, d.display(), h.objects, human(h.bytes));
         if index.current == m.version {
@@ -381,7 +430,7 @@ pub fn release(a: Args, interactive: bool, p: Progress) -> Result<()> {
     // the bundle, for a server elsewhere
     let name = format!("ffxi-update-{}.tar", m.version);
     let out = a.out.clone().unwrap_or_else(home).join(&name);
-    let h = make_bundle(&game, &m, &hosted, &base, &current, &out, p)?;
+    let h = make_bundle(&game, &m, &hosted, &base, ib.as_ref(), &current, &out, p)?;
     let size = std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0);
     println!("Made {}\n  {} files, {}; the update file is {}", out.display(), h.objects, human(h.bytes), human(size));
 
@@ -397,7 +446,7 @@ pub fn release(a: Args, interactive: bool, p: Progress) -> Result<()> {
         println!("Not uploaded. To publish it by hand: copy it there and run\n  {}", apply(false));
         return Ok(());
     }
-    let hand_out = ask_hand_out(unknown);
+    let hand_out = (rebase && current == m.version) || ask_hand_out(unknown);
     let remote = format!("/tmp/{name}");
     println!("> scp {} {login}:{remote}", out.display());
     let ok = Command::new("scp").arg(&out).arg(format!("{login}:{remote}")).status().map(|s| s.success()).unwrap_or(false);

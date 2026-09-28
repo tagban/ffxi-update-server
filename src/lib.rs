@@ -245,6 +245,60 @@ pub fn patched_version(game: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Each file patch.cfg lists, and the version it is at now (the last it names for it); lowercase
+/// paths.
+fn patch_history(game: &Path) -> Option<BTreeMap<String, String>> {
+    let text = String::from_utf8_lossy(&fs::read(game.join("patch.cfg")).ok()?).into_owned();
+    let mut out = BTreeMap::new();
+    let mut file: Option<String> = None;
+    for line in text.lines() {
+        if let Some(rest) = line.strip_prefix("file ") {
+            file = rest.strip_suffix(" {").map(|p| p.trim().to_ascii_lowercase());
+        } else if line.starts_with('}') {
+            file = None;
+        } else if let (Some(f), Some(v)) = (&file, line.split(' ').next()) {
+            if v.len() >= 10 && v.as_bytes()[8] == b'_' && v[..8].bytes().all(|b| b.is_ascii_digit()) {
+                out.insert(f.clone(), v.to_string());
+            }
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// What a fresh install from Square Enix's installer has that version `m` still uses: the files
+/// patch.cfg says are at the installer's version (the one most files are still at, e.g. 30210706_0,
+/// as the 2021 installer left them) and the files PlayOnline never patches. Named
+/// "installer-<version>". Published as a version's base, a site hosts everything else, so a
+/// player with nothing but a fresh install gets the whole version from it. `game` is an install of
+/// `m` (its patch.cfg says which files the updates changed).
+pub fn installer_base(game: &Path, m: &Manifest) -> Option<Manifest> {
+    let history = patch_history(game)?;
+    let mut count: BTreeMap<&str, usize> = BTreeMap::new();
+    for v in history.values() {
+        *count.entry(v.as_str()).or_default() += 1;
+    }
+    let installer = count.iter().max_by_key(|(_, n)| **n)?.0.to_string();
+    let files: Vec<Entry> = m
+        .files
+        .iter()
+        .filter(|e| {
+            let low = e.path.to_ascii_lowercase();
+            // PlayOnline's own records change with every update
+            !low.starts_with("patch") && history.get(&low).map(|v| *v == installer).unwrap_or(true)
+        })
+        .cloned()
+        .collect();
+    Some(Manifest {
+        format: FORMAT.into(),
+        version: format!("installer-{installer}"),
+        build: String::new(),
+        ffximain_sha256: String::new(),
+        ffxi_sha256: String::new(),
+        created: m.created,
+        files,
+    })
+}
+
 /// Every file of an install hashed into a manifest (and put in `store` when given). Its version is
 /// the one patch.cfg names, else the one known-builds.json gives its FFXiMain.dll, else unknown-<hash>.
 pub fn hash_install(game: &Path, store: Option<&Vault>, what: &str, progress: Progress) -> Result<Manifest> {
@@ -749,7 +803,7 @@ fn tar_bytes<W: Write>(t: &mut tar::Builder<W>, path: &str, data: &[u8]) -> Resu
 /// Writes a bundle of version `m` (hashed from the install `game`): its manifest, and every file of
 /// it whose content is not in `hosted` (what the site has: its current version, and that version's
 /// base, which players bring). `base` and `since` go in the header.
-pub fn make_bundle(game: &Path, m: &Manifest, hosted: &BTreeSet<String>, base: &str, since: &str, out: &Path, progress: Progress) -> Result<BundleHeader> {
+pub fn make_bundle(game: &Path, m: &Manifest, hosted: &BTreeSet<String>, base: &str, base_manifest: Option<&Manifest>, since: &str, out: &Path, progress: Progress) -> Result<BundleHeader> {
     if !plain_name(&m.version) {
         return Err(format!("version name {:?}: letters, digits, _ - . only", m.version));
     }
@@ -788,6 +842,9 @@ pub fn make_bundle(game: &Path, m: &Manifest, hosted: &BTreeSet<String>, base: &
     let tmp = out.with_extension("tmp");
     let mut t = tar::Builder::new(std::io::BufWriter::new(File::create(&tmp).map_err(err(tmp.display()))?));
     tar_bytes(&mut t, "bundle.json", &serde_json::to_vec_pretty(&header).unwrap())?;
+    if let Some(b) = base_manifest {
+        tar_bytes(&mut t, &format!("versions/{}.json", b.version), &serde_json::to_vec_pretty(b).unwrap())?;
+    }
     tar_bytes(&mut t, &format!("versions/{}.json", m.version), &serde_json::to_vec_pretty(m).unwrap())?;
     for sha in objects.keys() {
         let src = parts.join(format!("{sha}.zst"));
@@ -810,6 +867,7 @@ pub fn apply_bundle(site: &Path, r: impl Read, make_current: bool, progress: Pro
     let mut t = tar::Archive::new(r);
     let mut header: Option<BundleHeader> = None;
     let mut manifest: Option<Manifest> = None;
+    let mut base_manifest: Option<Manifest> = None;
     let mut done = 0;
     for entry in t.entries().map_err(err("bundle"))? {
         let mut entry = entry.map_err(err("bundle"))?;
@@ -825,10 +883,16 @@ pub fn apply_bundle(site: &Path, r: impl Read, make_current: bool, progress: Pro
         } else if let Some(name) = path.strip_prefix("versions/").and_then(|p| p.strip_suffix(".json")) {
             let m: Manifest = serde_json::from_slice(&data).map_err(err(&path))?;
             m.check()?;
-            if Some(name) != header.as_ref().map(|h| h.version.as_str()) || m.version != name {
-                return Err(format!("{path}: not the version the bundle says"));
+            let h = header.as_ref().ok_or("bundle.json must come first")?;
+            if m.version != name {
+                return Err(format!("{path}: not the version it is named for"));
+            } else if name == h.version {
+                manifest = Some(m);
+            } else if name == h.base {
+                base_manifest = Some(m);
+            } else {
+                return Err(format!("{path}: not the version the bundle says, nor its base"));
             }
-            manifest = Some(m);
         } else if let Some(sha) = path.strip_prefix("objects/").and_then(|p| p.get(3..)).and_then(|p| p.strip_suffix(".zst")) {
             if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()) || !path.starts_with(&format!("objects/{}/", &sha[..2])) {
                 return Err(format!("{path}: not an object"));
@@ -863,8 +927,23 @@ pub fn apply_bundle(site: &Path, r: impl Read, make_current: bool, progress: Pro
     }
     let h = header.ok_or("not a bundle: no bundle.json")?;
     let m = manifest.ok_or("the bundle has no manifest")?;
+    if let Some(b) = &base_manifest {
+        write_manifest(site, b)?;
+    }
     let index = list_version(site, &h, &m, make_current, "neither in the bundle nor on this site")?;
     Ok((h, index))
+}
+
+/// A manifest into a site's versions/ (a base: players bring its files; it is not listed).
+fn write_manifest(site: &Path, m: &Manifest) -> Result<()> {
+    if !plain_name(&m.version) {
+        return Err(format!("version name {:?}: letters, digits, _ - . only", m.version));
+    }
+    let p = site.join("versions").join(format!("{}.json", m.version));
+    fs::create_dir_all(p.parent().unwrap()).map_err(err("versions"))?;
+    let tmp = p.with_extension("json.tmp");
+    fs::write(&tmp, serde_json::to_string_pretty(m).unwrap()).map_err(err(tmp.display()))?;
+    fs::rename(&tmp, &p).map_err(err(p.display()))
 }
 
 /// Lists a version on a site whose objects are there: once everything it needs is hosted (or in its
@@ -920,7 +999,17 @@ fn list_version(site: &Path, h: &BundleHeader, m: &Manifest, make_current: bool,
 
 /// make_bundle and apply_bundle in one, for a site folder this machine can write (here, or a
 /// share): each file the site lacks compressed straight into it, then the version listed.
-pub fn publish_install(site: &Path, game: &Path, m: &Manifest, hosted: &BTreeSet<String>, base: &str, since: &str, make_current: bool, progress: Progress) -> Result<(BundleHeader, Index)> {
+pub fn publish_install(
+    site: &Path,
+    game: &Path,
+    m: &Manifest,
+    hosted: &BTreeSet<String>,
+    base: &str,
+    base_manifest: Option<&Manifest>,
+    since: &str,
+    make_current: bool,
+    progress: Progress,
+) -> Result<(BundleHeader, Index)> {
     if !plain_name(&m.version) {
         return Err(format!("version name {:?}: letters, digits, _ - . only", m.version));
     }
@@ -954,6 +1043,9 @@ pub fn publish_install(site: &Path, game: &Path, m: &Manifest, hosted: &BTreeSet
         progress("publish", done.fetch_add(e.size, Ordering::Relaxed) + e.size, h.bytes);
         Ok(())
     })?;
+    if let Some(b) = base_manifest {
+        write_manifest(site, b)?;
+    }
     let index = list_version(site, &h, m, make_current, "not on this site")?;
     Ok((h, index))
 }
@@ -1423,6 +1515,12 @@ pub fn fetch(vault: &Vault, base: &str, version: Option<&str>, progress: Progres
         let bm: Manifest = serde_json::from_str(&s).map_err(err("manifest"))?;
         let from_base: BTreeSet<&str> = bm.files.iter().map(|e| e.sha256.as_str()).collect();
         let lacking = need.keys().filter(|k| from_base.contains(k.as_str())).count();
+        if lacking > 0 && iv.base.starts_with("installer-") {
+            return Err(format!(
+                "{lacking} files a fresh install of FINAL FANTASY XI has are missing or changed here, and the server does not \
+                 host them (it hosts only what the official installer does not give). Repair or reinstall the game, then try again."
+            ));
+        }
         if lacking > 0 {
             return Err(format!(
                 "The server publishes only what version {version} changes from version {}, and {lacking} files of {} are not \

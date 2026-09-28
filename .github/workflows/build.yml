@@ -39,7 +39,13 @@ jobs:
           path: dist/*
 
   windows:
-    name: Windows x86_64
+    name: Windows ${{ matrix.arch }}
+    strategy:
+      matrix:
+        include:
+          - { arch: x86_64, target: x86_64-pc-windows-msvc, suffix: "" }
+          # 32-bit Windows runs the retail game natively (it is a 32-bit program): the updater for it
+          - { arch: x86, target: i686-pc-windows-msvc, suffix: "-32bit" }
     runs-on: windows-latest
     defaults:
       run:
@@ -47,19 +53,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked
-      - run: cargo test --release --locked
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+      - run: cargo test --release --locked --target ${{ matrix.target }}
       # one program, three names: a double-click does what the name says
       - run: |
           mkdir -p dist
-          cp target/release/xi-vault.exe dist/xi-vault.exe
-          cp target/release/xi-vault.exe dist/ffxi-update-publisher.exe
-          cp target/release/xi-vault.exe dist/ffxi-updater.exe
-          cp scripts/install-server.ps1 scripts/install-server.cmd dist/
+          b=target/${{ matrix.target }}/release/xi-vault.exe
+          cp $b dist/xi-vault${{ matrix.suffix }}.exe
+          cp $b dist/ffxi-update-publisher${{ matrix.suffix }}.exe
+          cp $b dist/ffxi-updater${{ matrix.suffix }}.exe
+          if [ -z "${{ matrix.suffix }}" ]; then cp scripts/install-server.ps1 scripts/install-server.cmd dist/; fi
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-x86_64
+          name: windows-${{ matrix.arch }}
           path: dist/*
 
   macos:

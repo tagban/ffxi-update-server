@@ -88,7 +88,7 @@ packs/<from>..<to>.tar.zst    optional: a delta in one download
 | `version` | its name: the newest version in its `patch.cfg`, or an operator's name for a customised version (`30260904_1-custom.1`); letters, digits, `_ - .` |
 | `build` | the ffxi-native launcher's label for its `FFXiMain.dll` (`known-builds.json`); empty when unknown |
 | `files`, `bytes` | its file count and total size |
-| `base` | optional: the site hosts only the files this version does **not** share with `base`; the player brings the rest from their own install of `base`. `base` equal to the version itself: the site hosts none of its files |
+| `base` | optional: the site hosts only the files this version does **not** share with `base`; the player brings the rest from their own install of `base`. `base` equal to the version itself: the site hosts none of its files. `installer-<version>` (e.g. `installer-30210706_0`): the files Square Enix's installer puts on disk that this version still uses, so a fresh official install is enough; its manifest is in `versions/` but it is not listed as a version |
 | `digest` | optional: the SHA-256 of the manifest's sorted `path NUL sha256 LF` lines. What the version is, whatever it is called |
 
 ### versions/&lt;version&gt;.json (a manifest)

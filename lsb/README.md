@@ -1,4 +1,8 @@
-# LandSandBoat: the client version request
+# LandSandBoat: the client version request (optional)
+
+This is not part of LandSandBoat. Apply it to your own server if you want the game server itself to
+name the version and update address; without it, launchers use the version your update server hands
+out, which you keep equal to `CLIENT_VER` (docs/SERVER-OPERATORS.md).
 
 `login-version-info.patch` adds to LandSandBoat's login server (`xi_connect`, the auth port 54231)
 a request anyone can make without an account, `LOGIN_VERSION_INFO` (command `0x40`), answered with

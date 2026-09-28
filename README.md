@@ -9,8 +9,9 @@ automatically, on Windows, macOS and Linux: upgrades, rollbacks, and the server'
   changed, checking every file.
 - **Updater**: for players who start the game with xiloader, Ashita or Windower. It brings their own
   install to the server's version, up or down, and keeps a backup of every file it replaces.
-- **LandSandBoat patch**: the login server tells launchers which version it wants, where to get it,
-  and which xiloader protocol it speaks.
+- **LandSandBoat patch** (optional, for your own server): the login server tells launchers which
+  version it wants, where to get it, and which xiloader protocol it speaks. Not needed: without it,
+  the version your update server hands out decides.
 - **A documented protocol**, so any launcher can do the same.
 
 One program does all of it: `xi-vault` (on Windows also named `ffxi-update-publisher.exe` and
@@ -22,7 +23,7 @@ One program does all of it: `xi-vault` (on Windows also named `ffxi-update-publi
 | --- | --- |
 | [Running an update server](docs/SERVER-OPERATORS.md) | for server operators: set up (Windows or Linux), publish, point players at it, roll back, custom DATs |
 | [The update protocol](docs/PROTOCOL.md) | for launcher authors: how to ask a server, find its site, choose and fetch a version, check it |
-| [LandSandBoat patch](lsb/README.md) | `LOGIN_VERSION_INFO`: the version request on the login server |
+| [LandSandBoat patch](lsb/README.md) | optional: `LOGIN_VERSION_INFO`, the version request on the login server |
 | [xi-vault reference](docs/REFERENCE.md) | every command, the site layout, the vault |
 
 ## Quick start (server operator, Windows)
@@ -32,8 +33,8 @@ One program does all of it: `xi-vault` (on Windows also named `ffxi-update-publi
 2. Forward TCP 54080 to that PC, and point `update.<your server>` at it in DNS.
 3. After each game update, double-click `ffxi-update-publisher.exe` and give it the site folder
    `C:\xi-vault\site`.
-4. In LandSandBoat's `settings/login.lua`: `CLIENT_VER` to the new version, and (with the patch)
-   `UPDATE_URL` to your update server.
+4. Hand it out (the publisher asks), and set LandSandBoat's `CLIENT_VER` in `settings/login.lua` to
+   the same version.
 
 Linux: `sudo sh scripts/install-server.sh ./xi-vault`. Details in the
 [operator guide](docs/SERVER-OPERATORS.md).

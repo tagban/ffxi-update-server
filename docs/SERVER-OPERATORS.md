@@ -145,24 +145,36 @@ know, the publisher says so. Publish, but do not hand it out until a launcher re
 
 ## Telling players which version to use
 
-Your game server is the authority. In LandSandBoat's `settings/login.lua` (copy the setting from
-`settings/default/login.lua`):
+The version your update server hands out is the one players are brought to, up or down:
+
+```
+xi-vault current <site> 30260904_1
+```
+
+(the publisher sets it when you answer yes to "Hand it out"). Keep it the same as LandSandBoat's
+`CLIENT_VER` in `settings/login.lua`, which decides who may log in:
 
 ```lua
-CLIENT_VER = '30260904_1',                       -- the version players must have
-VER_LOCK   = 2,                                  -- 1: exactly it; 2: it or newer (by year and month)
+CLIENT_VER = '30260904_1',  -- the version players must have
+VER_LOCK   = 2,             -- 1: exactly it; 2: it or newer (by year and month)
+```
+
+To move everyone to a new version: publish it, hand it out, set `CLIENT_VER` to it and restart the
+login server (`xi_connect`). Players who press Play (or run the updater) are brought to it.
+
+Launchers find your update server by themselves at `update.<your server>` or port 54080 of the game
+server; players can also type its address.
+
+**Optional: the game server names the version.** With the patch in [lsb/](../lsb/) (not part of
+LandSandBoat; apply it to your own server if you like), the login server answers a version request
+with `CLIENT_VER`, `VER_LOCK`, the xiloader protocol it speaks, and a new setting, `UPDATE_URL`:
+
+```lua
 UPDATE_URL = 'http://update.example.com:54080',  -- where you publish it
 ```
 
-The launcher and the updater ask your login server (port 54231) for these three before anything
-else, and bring each player to exactly `CLIENT_VER`, up or down, from `UPDATE_URL`.
-`UPDATE_URL` and the request that reads it (`LOGIN_VERSION_INFO`) come with a LandSandBoat change
-that is not merged upstream yet; see [lsb/](../lsb/). Without it, players' launchers use the version
-your update server hands out (`xi-vault current`, below), found at `update.<server>` or port 54080
-of the game server, so keep the two the same.
-
-To move everyone to a new version: publish it, then set `CLIENT_VER` to it and restart the login
-server (`xi_connect`). Players who press Play (or run the updater) are brought to it.
+Launchers and the updater then bring players to exactly `CLIENT_VER` from `UPDATE_URL`, so there is
+only one setting to change, and a site can serve several game servers on different versions.
 
 ## Custom DATs
 

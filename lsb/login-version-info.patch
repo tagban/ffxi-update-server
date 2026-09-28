@@ -1,5 +1,5 @@
 diff --git a/settings/default/login.lua b/settings/default/login.lua
-index 53be152c..ccb47d30 100644
+index d7fde199..57011373 100644
 --- a/settings/default/login.lua
 +++ b/settings/default/login.lua
 @@ -21,6 +21,11 @@ xi.settings.login =
@@ -15,10 +15,10 @@ index 53be152c..ccb47d30 100644
      -- 1 - enabled (only GM characters allowed online, no new character creation)
      MAINT_MODE = 0,
 diff --git a/src/login/auth_session.cpp b/src/login/auth_session.cpp
-index e57f404d..14f8495a 100644
+index fc931551..f9567f47 100644
 --- a/src/login/auth_session.cpp
 +++ b/src/login/auth_session.cpp
-@@ -149,7 +149,24 @@ void auth_session::read_func()
+@@ -150,7 +150,25 @@ void auth_session::read_func()
          return;
      }
  
@@ -37,6 +37,7 @@ index e57f404d..14f8495a 100644
 +        reply["update_url"] = settings::get<std::string>("login.UPDATE_URL");
 +        // The loader protocol this server speaks, so a launcher can pick the matching variant
 +        reply["loader_version"] = SupportedXiloaderVersion;
++        reply["profile_port"]   = settings::get<uint16>("network.PROFILE_PORT");
 +        sendJsonAsBuffer(reply);
 +        return;
 +    }
@@ -45,7 +46,7 @@ index e57f404d..14f8495a 100644
      std::string            password            = loginHelpers::jsonGet<std::string>(jsonBuffer, "password").value_or("");
      std::string            updated_password    = loginHelpers::jsonGet<std::string>(jsonBuffer, "new_password").value_or("");
 diff --git a/src/login/auth_session.h b/src/login/auth_session.h
-index 38caf915..54ff359a 100644
+index dff489a9..e5504810 100644
 --- a/src/login/auth_session.h
 +++ b/src/login/auth_session.h
 @@ -44,6 +44,9 @@ enum class login_cmd : uint8_t

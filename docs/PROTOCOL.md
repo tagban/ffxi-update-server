@@ -26,7 +26,7 @@ The game server is the authority on the version. A LandSandBoat login server wit
 
 ```
 → {"command":64,"version":[2,2,0]}
-← {"client_ver":"30260904_1","ver_lock":2,"update_url":"http://update.example.com:54080","loader_version":[2,2,0]}
+← {"client_ver":"30260904_1","ver_lock":2,"update_url":"http://update.example.com:54080","loader_version":[2,2,0],"profile_port":51220}
 ```
 
 | Field | Meaning |
@@ -35,6 +35,7 @@ The game server is the authority on the version. A LandSandBoat login server wit
 | `ver_lock` | `0` any version, `1` exactly `client_ver`, `2` `client_ver` or newer. LandSandBoat compares only the first six characters (year and month, `302609`) |
 | `update_url` | the site that publishes the versions; empty when the server names none |
 | `loader_version` | the xiloader protocol its login server speaks: `[major, minor, patch]`, major.minor must match ([section 7](#7-signing-in-with-the-right-loader)) |
+| `profile_port` | its PlayOnline profile server (`xi_profile`, loader 2.2): where polcore's friend list and messages go |
 
 Send the request in one write; read until the reply parses as JSON (it may be followed by NUL
 padding) or the connection closes. Give up after a couple of seconds: a login server without the

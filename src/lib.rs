@@ -1218,6 +1218,13 @@ pub struct ServerInfo {
     /// so a launcher signs in with the matching variant; empty from a server that does not say
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub loader_version: Vec<u8>,
+    /// its PlayOnline profile server's port (xi_profile; loader 2.2); 0 when it does not say
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub profile_port: u16,
+}
+
+fn is_zero(n: &u16) -> bool {
+    *n == 0
 }
 
 /// xi_connect's auth port.

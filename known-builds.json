@@ -1,0 +1,69 @@
+{
+  "_comment": "Builds of the game the ffxi-native launcher can run, and every program file (.dll, .exe, ...) of the retail versions they came with, by SHA-256 (hashes only). The publisher labels versions with the builds; the updater installs no program file that is not listed here.",
+  "builds": {
+    "2026-08-22": {
+      "FFXiMain.dll": {
+        "sha256": "6f8844eb7f0380f30a3db2fc3c435e1145f5c450bdd0999133cc75c516ec3c3b"
+      },
+      "FFXi.dll": {
+        "sha256": "b1e7e53a53640d7b56ca82d42700745b089f2466ffe55965511cbf5168804d7b"
+      },
+      "version": "30260805_0",
+      "programs": {
+        "FFXi.dll": "b1e7e53a53640d7b56ca82d42700745b089f2466ffe55965511cbf5168804d7b",
+        "FFXiMain.dll": "6f8844eb7f0380f30a3db2fc3c435e1145f5c450bdd0999133cc75c516ec3c3b",
+        "FFXiResource.dll": "6f5e3389e45e995aea67940a85b1dfbe16530ad8758702003ef11fe8e98bfceb",
+        "FFXiVersions.dll": "906e297d80faea261c1742456a5ee5cc63ec28cfb197a9efe72517e93ee53a16",
+        "ImeUiDll2.dll": "7660db200465f4e4b4c718ff13b3a975c71aea8dc96b61c6e93927c78ac1dbd2",
+        "Tools/FFXiPadConfig.exe": "dd658d4aab83aca094c69a01ea186180be4d3e6cf8f4a40aa389bc68bb742781",
+        "Tools/FINAL FANTASY XI Config.exe": "f2edc576aec4d5612ee029ea1037e90d16ad31c5000faafdc1abe41a134beb88",
+        "Tools/polboot.exe": "9ac2cb423e31418019b40afa12bab66205c338b0977bc7681b738121cbf75240",
+        "Tools/xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c",
+        "ToolsEU/FFXiPadConfig.exe": "dd658d4aab83aca094c69a01ea186180be4d3e6cf8f4a40aa389bc68bb742781",
+        "ToolsEU/FINAL FANTASY XI Config.exe": "f2edc576aec4d5612ee029ea1037e90d16ad31c5000faafdc1abe41a134beb88",
+        "ToolsEU/polboot.exe": "54d239f1e556e9889a6041df606aa1e9f022e45b6f536c8d39a484f197119d77",
+        "ToolsEU/xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c",
+        "ToolsUS/FFXiPadConfig.exe": "dd658d4aab83aca094c69a01ea186180be4d3e6cf8f4a40aa389bc68bb742781",
+        "ToolsUS/FINAL FANTASY XI Config.exe": "f2edc576aec4d5612ee029ea1037e90d16ad31c5000faafdc1abe41a134beb88",
+        "ToolsUS/polboot.exe": "efb06df6491f9de20163d220528b29e2847cf128eeb75e5d317bbeccb547a219",
+        "ToolsUS/xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c",
+        "config.sys": "dba5166ad9db9ba648c1032ebbd34dcd0d085b50023b839ef5c68ca1db93a563",
+        "imeuidll.dll": "bc7a2a8482c24314771c051440104ff2faaedd7c384700b44ad9c0decb27cb2e",
+        "polboot.exe": "94299839032cbde29f7d43b4a6be6d441eb150561b42e902221cbc70be9a6d4a",
+        "xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c"
+      }
+    },
+    "2026-09-03": {
+      "FFXiMain.dll": {
+        "sha256": "f2245d1c9d06e02c36624942483913f5120c0d40777fc1bb8703c6f4bda823e4"
+      },
+      "FFXi.dll": {
+        "sha256": "9053d4106160a073a215dcd1d9045c804a27f459c6cb7cacec74eaefaf827bc7"
+      },
+      "version": "30260903_0",
+      "programs": {
+        "FFXi.dll": "9053d4106160a073a215dcd1d9045c804a27f459c6cb7cacec74eaefaf827bc7",
+        "FFXiMain.dll": "f2245d1c9d06e02c36624942483913f5120c0d40777fc1bb8703c6f4bda823e4",
+        "FFXiResource.dll": "38e52738d81382f013ec3b19e82e2f60c41c1fe0e4aa45489876bbd4a1fb2b50",
+        "FFXiVersions.dll": "906e297d80faea261c1742456a5ee5cc63ec28cfb197a9efe72517e93ee53a16",
+        "ImeUiDll2.dll": "7660db200465f4e4b4c718ff13b3a975c71aea8dc96b61c6e93927c78ac1dbd2",
+        "Tools/FFXiPadConfig.exe": "dd658d4aab83aca094c69a01ea186180be4d3e6cf8f4a40aa389bc68bb742781",
+        "Tools/FINAL FANTASY XI Config.exe": "f2edc576aec4d5612ee029ea1037e90d16ad31c5000faafdc1abe41a134beb88",
+        "Tools/polboot.exe": "9ac2cb423e31418019b40afa12bab66205c338b0977bc7681b738121cbf75240",
+        "Tools/xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c",
+        "ToolsEU/FFXiPadConfig.exe": "dd658d4aab83aca094c69a01ea186180be4d3e6cf8f4a40aa389bc68bb742781",
+        "ToolsEU/FINAL FANTASY XI Config.exe": "f2edc576aec4d5612ee029ea1037e90d16ad31c5000faafdc1abe41a134beb88",
+        "ToolsEU/polboot.exe": "54d239f1e556e9889a6041df606aa1e9f022e45b6f536c8d39a484f197119d77",
+        "ToolsEU/xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c",
+        "ToolsUS/FFXiPadConfig.exe": "dd658d4aab83aca094c69a01ea186180be4d3e6cf8f4a40aa389bc68bb742781",
+        "ToolsUS/FINAL FANTASY XI Config.exe": "f2edc576aec4d5612ee029ea1037e90d16ad31c5000faafdc1abe41a134beb88",
+        "ToolsUS/polboot.exe": "efb06df6491f9de20163d220528b29e2847cf128eeb75e5d317bbeccb547a219",
+        "ToolsUS/xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c",
+        "config.sys": "dba5166ad9db9ba648c1032ebbd34dcd0d085b50023b839ef5c68ca1db93a563",
+        "imeuidll.dll": "bc7a2a8482c24314771c051440104ff2faaedd7c384700b44ad9c0decb27cb2e",
+        "polboot.exe": "94299839032cbde29f7d43b4a6be6d441eb150561b42e902221cbc70be9a6d4a",
+        "xinputdll.dll": "809c3ebc700fc83ee7f1b340927e94a78126584fa0988a266f8e8456617f954c"
+      }
+    }
+  }
+}

@@ -1,0 +1,33 @@
+[package]
+name = "xi-vault"
+version = "0.1.0"
+description = "FINAL FANTASY XI client versions: snapshots, diffs, delta packs, and a static file server for them"
+edition = "2021"
+publish = false
+license = "MIT"
+repository = "https://github.com/tagban/ffxi-update-server"
+
+[lib]
+name = "xi_vault"
+path = "src/lib.rs"
+
+[[bin]]
+name = "xi-vault"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+rayon = "1"
+zstd = { version = "0.13", features = ["zstdmt"] }
+tar = "0.4"
+tiny_http = "0.12"
+ureq = "2"
+# the login server's TLS (self-signed, as xiloader accepts): ureq's rustls, asked directly
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+clap = { version = "4", features = ["derive"] }
+
+[profile.release]
+codegen-units = 1
+lto = true

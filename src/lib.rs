@@ -762,6 +762,212 @@ pub fn unpack(vault: &Vault, r: impl Read, progress: Progress) -> Result<Manifes
     Ok(h.manifest)
 }
 
+// --- versions over the install: overlays and shelves -------------------------------------------
+//
+// A player's install is kept on the newest version (update_install). Another version a server
+// wants is played as an overlay: only the files that version has and the install does not, in
+// <vault>/overlays/<version>, which the game host lays over the install (xi-host --version-dir). A
+// version not needed for now is shelved: what it needs beyond another version, as one compressed
+// pack in <vault>/shelves/<version>.xipack, and its own objects removed from the store; unshelve
+// brings it back. Disk space is the point: an overlay is the few hundred MB a version changes, a
+// shelf that compressed, and a forgotten version nothing.
+
+/// Files every overlay carries, changed or not: a version's build is read from them (the launcher
+/// identifies an overlay, and makes its game, from its own FFXiMain.dll and FFXi.dll).
+const OVERLAY_ALWAYS: &[&str] = &["FFXiMain.dll", "FFXi.dll"];
+
+/// What an overlay folder is (xi-version.json in it).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OverlayInfo {
+    pub version: String,
+    pub build: String,
+    /// the version of the install it goes over
+    pub base: String,
+    pub files: usize,
+    pub bytes: u64,
+}
+
+impl Vault {
+    pub fn overlay_dir(&self, version: &str) -> PathBuf {
+        self.root.join("overlays").join(version)
+    }
+
+    pub fn shelf_path(&self, version: &str) -> PathBuf {
+        self.root.join("shelves").join(format!("{version}.xipack"))
+    }
+
+    /// Every object a version names that the store does not hold.
+    pub fn missing(&self, m: &Manifest) -> Vec<Entry> {
+        m.files.iter().filter(|e| !self.has(e)).cloned().collect()
+    }
+}
+
+/// The overlay at `dir`, if there is one (its xi-version.json).
+pub fn overlay_info(dir: &Path) -> Option<OverlayInfo> {
+    serde_json::from_str(&fs::read_to_string(dir.join("xi-version.json")).ok()?).ok()
+}
+
+/// `want` over an install that is `base`: each file of `want` that `base` does not have as it is
+/// (added or changed), and FFXiMain.dll and FFXi.dll always, cloned from the store into
+/// <vault>/overlays/<want> (replacing an overlay there). A file `base` has and `want` does not
+/// stays visible: the game opens files by name, and one it never asks for does nothing.
+pub fn make_overlay(vault: &Vault, base: &Manifest, want: &Manifest, progress: Progress) -> Result<(PathBuf, OverlayInfo)> {
+    let d = diff(base, want);
+    let mut files: Vec<Entry> = d.added.iter().chain(&d.changed).cloned().collect();
+    for name in OVERLAY_ALWAYS {
+        if !files.iter().any(|e| e.path.eq_ignore_ascii_case(name)) {
+            if let Some(e) = want.files.iter().find(|e| e.path.eq_ignore_ascii_case(name)) {
+                files.push(e.clone());
+            }
+        }
+    }
+    let lacking: Vec<&Entry> = files.iter().filter(|e| !vault.has(e)).collect();
+    if !lacking.is_empty() {
+        return Err(format!("{} files of {} are not in the vault (the first: {}); fetch or unshelve it first", lacking.len(), want.version, lacking[0].path));
+    }
+    let out = vault.overlay_dir(&want.version);
+    let tmp = out.with_extension("new");
+    let _ = fs::remove_dir_all(&tmp);
+    let total: u64 = files.iter().map(|e| e.size).sum();
+    let done = AtomicU64::new(0);
+    files.par_iter().try_for_each(|e| -> Result<()> {
+        let dst = tmp.join(&e.path);
+        fs::create_dir_all(dst.parent().unwrap()).map_err(err(dst.display()))?;
+        fs::copy(vault.object(&e.sha256), &dst).map_err(err(dst.display()))?;
+        progress("overlay", done.fetch_add(e.size, Ordering::Relaxed) + e.size, total);
+        Ok(())
+    })?;
+    let info = OverlayInfo { version: want.version.clone(), build: want.build.clone(), base: base.version.clone(), files: files.len(), bytes: total };
+    fs::write(tmp.join("xi-version.json"), serde_json::to_string_pretty(&info).unwrap()).map_err(err(tmp.display()))?;
+    let _ = fs::remove_dir_all(&out);
+    fs::rename(&tmp, &out).map_err(err(out.display()))?;
+    Ok((out, info))
+}
+
+/// A shelved version (its pack's header).
+#[derive(Serialize, Clone, Debug)]
+pub struct ShelfInfo {
+    pub version: String,
+    pub build: String,
+    /// the version it was packed against: unshelving needs that version's files too
+    pub from: String,
+    pub files: usize,
+    /// the version's whole size, and the shelf's on disk
+    pub bytes: u64,
+    pub shelf_bytes: u64,
+}
+
+fn read_pack_header(path: &Path) -> Result<PackHeader> {
+    let f = File::open(path).map_err(err(path.display()))?;
+    let z = zstd::Decoder::new(f).map_err(err("zstd"))?;
+    let mut t = tar::Archive::new(z);
+    let mut entries = t.entries().map_err(err("pack"))?;
+    let mut first = entries.next().ok_or("an empty pack")?.map_err(err("pack"))?;
+    let mut s = String::new();
+    first.read_to_string(&mut s).map_err(err("pack"))?;
+    serde_json::from_str(&s).map_err(err(path.display()))
+}
+
+pub fn shelves(vault: &Vault) -> Vec<ShelfInfo> {
+    let mut out = Vec::new();
+    for e in fs::read_dir(vault.root.join("shelves")).into_iter().flatten().flatten() {
+        let p = e.path();
+        if p.extension().is_some_and(|x| x == "xipack") {
+            if let Ok(h) = read_pack_header(&p) {
+                out.push(ShelfInfo {
+                    files: h.manifest.files.len(),
+                    bytes: h.manifest.bytes(),
+                    build: h.manifest.build.clone(),
+                    version: h.to,
+                    from: h.from,
+                    shelf_bytes: fs::metadata(&p).map(|m| m.len()).unwrap_or(0),
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.version.cmp(&b.version));
+    out
+}
+
+/// Removes the objects `version` names that no other version in the vault does; (files, bytes).
+fn prune(vault: &Vault, version: &Manifest) -> Result<(usize, u64)> {
+    let mut keep = BTreeSet::new();
+    for m in vault.versions()? {
+        if m.version != version.version {
+            keep.extend(m.files.into_iter().map(|e| e.sha256));
+        }
+    }
+    let (mut n, mut bytes, mut seen) = (0usize, 0u64, BTreeSet::new());
+    for e in &version.files {
+        if keep.contains(&e.sha256) || !seen.insert(e.sha256.clone()) {
+            continue;
+        }
+        let p = vault.object(&e.sha256);
+        if let Ok(md) = fs::metadata(&p) {
+            fs::remove_file(&p).map_err(err(p.display()))?;
+            n += 1;
+            bytes += md.len();
+        }
+    }
+    Ok((n, bytes))
+}
+
+/// Shelves `version`: what it needs beyond `against` (the install's version, which stays) packed
+/// into <vault>/shelves/<version>.xipack, then its manifest, its overlay and the objects no other
+/// version uses removed. (raw bytes packed, shelf bytes, bytes freed). A shelf made before is kept.
+pub fn shelve(vault: &Vault, version: &str, against: &str, level: i32, progress: Progress) -> Result<(u64, u64, u64)> {
+    if version == against {
+        return Err(format!("{version} is the version it would be packed against"));
+    }
+    let m = vault.load(version)?;
+    let shelf = vault.shelf_path(version);
+    let (raw, packed) = if shelf.is_file() {
+        (0, fs::metadata(&shelf).map(|md| md.len()).unwrap_or(0))
+    } else {
+        fs::create_dir_all(shelf.parent().unwrap()).map_err(err(shelf.display()))?;
+        pack(vault, against, version, &shelf, level, progress)?
+    };
+    // the pack is read back whole before anything is removed
+    let h = read_pack_header(&shelf)?;
+    if h.to != version || h.manifest.files.len() != m.files.len() {
+        return Err(format!("{}: not a whole shelf of {version}", shelf.display()));
+    }
+    let _ = fs::remove_dir_all(vault.overlay_dir(version));
+    fs::remove_file(vault.manifest_path(version)).map_err(err(version))?;
+    let (_, freed) = prune(vault, &m)?;
+    Ok((raw, packed, freed))
+}
+
+/// Brings a shelved version back into the vault (and, first, a shelved version it was packed
+/// against, when the vault no longer has that one's files either). The shelf stays.
+pub fn unshelve(vault: &Vault, version: &str, progress: Progress) -> Result<Manifest> {
+    let shelf = vault.shelf_path(version);
+    let h = read_pack_header(&shelf).map_err(|e| format!("{version} is not shelved: {e}"))?;
+    if vault.load(&h.from).is_err() && vault.shelf_path(&h.from).is_file() {
+        unshelve(vault, &h.from, progress)?;
+    }
+    let m = unpack(vault, File::open(&shelf).map_err(err(shelf.display()))?, progress)?;
+    let lacking = vault.missing(&m);
+    if !lacking.is_empty() {
+        return Err(format!("{version} is back, but {} of its files are not in the vault (version {} is needed as well)", lacking.len(), h.from));
+    }
+    Ok(m)
+}
+
+/// Forgets a version: its shelf, overlay, manifest and the objects no other version uses.
+pub fn forget(vault: &Vault, version: &str) -> Result<u64> {
+    let mut freed = 0;
+    if let Ok(m) = vault.load(version) {
+        freed += prune(vault, &m)?.1;
+        fs::remove_file(vault.manifest_path(version)).map_err(err(version))?;
+    }
+    let shelf = vault.shelf_path(version);
+    freed += fs::metadata(&shelf).map(|m| m.len()).unwrap_or(0);
+    let _ = fs::remove_file(&shelf);
+    let _ = fs::remove_dir_all(vault.overlay_dir(version));
+    Ok(freed)
+}
+
 // --- update bundles ------------------------------------------------------------------------------
 //
 // A server operator updates the game on one PC (PlayOnline) and the site lives on another machine.

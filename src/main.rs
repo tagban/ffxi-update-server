@@ -58,6 +58,16 @@ enum Cmd {
     Verify { game: PathBuf, version: String, #[arg(long)] full: bool, #[arg(long)] repair: bool },
     /// Put a version together as an install of its own
     Materialize { version: String, out: PathBuf },
+    /// A version as an overlay over an install (only the files it changes; <vault>/overlays/<version>)
+    Overlay { version: String, #[arg(long)] game: PathBuf },
+    /// Pack a version against another (the install's) and free what only it used; unshelve brings it back
+    Shelve { version: String, #[arg(long)] against: String, #[arg(long, default_value_t = 19)] level: i32 },
+    /// Bring a shelved version back into the vault
+    Unshelve { version: String },
+    /// The shelved versions
+    Shelves,
+    /// Remove a version entirely: its shelf, overlay, manifest, and the files only it used
+    Forget { version: String },
     /// Static files for a server to hand out: index.json, manifests, objects, packs. --since <v>:
     /// only what the versions add to <v> (players bring the rest from their own install)
     Publish { out: PathBuf, #[arg(long)] current: String, versions: Vec<String>, #[arg(long)] packs: bool, #[arg(long)] since: Option<String> },
@@ -255,6 +265,28 @@ fn run(cli: Cli) -> Result<()> {
             if fix && !(c.missing.is_empty() && c.wrong.is_empty()) {
                 println!("repaired {} files", repair(&game, &v, &c)?);
             }
+        }
+        Cmd::Overlay { version, game } => {
+            let v = vault()?;
+            let base = identify(&v, &game)?.ok_or(format!("{}: no version in the vault fits (snapshot it first)", game.display()))?;
+            let (dir, info) = make_overlay(&v, &base, &v.load(&version)?, &p)?;
+            println!("{}: {} over {}, {} files, {}", dir.display(), info.version, info.base, info.files, human(info.bytes));
+        }
+        Cmd::Shelve { version, against, level } => {
+            let (raw, packed, freed) = shelve(&vault()?, &version, &against, level, &p)?;
+            println!("{version} shelved: {} packed into {}, {} freed ({:.1}s)", human(raw), human(packed), human(freed), t.elapsed().as_secs_f64());
+        }
+        Cmd::Unshelve { version } => {
+            let m = unshelve(&vault()?, &version, &p)?;
+            println!("version {}: back in the vault ({} files)", m.version, m.files.len());
+        }
+        Cmd::Shelves => {
+            for s in shelves(&vault()?) {
+                println!("{:<14} build {:<12} {:>6} files  {:>10}  shelf {:>10}  (against {})", s.version, s.build, s.files, human(s.bytes), human(s.shelf_bytes), s.from);
+            }
+        }
+        Cmd::Forget { version } => {
+            println!("{version} forgotten: {} freed", human(forget(&vault()?, &version)?));
         }
         Cmd::Materialize { version, out } => {
             let m = vault()?.materialize(&version, &out, &p)?;
